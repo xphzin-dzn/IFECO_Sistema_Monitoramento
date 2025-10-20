@@ -11,10 +11,8 @@ const dbConfig = {
     queueLimit: 0
 };
 
-// Criar pool de conexões
 const pool = mysql.createPool(dbConfig);
 
-// Testar conexão ao inicializar
 const initializeDatabase = async () => {
     try {
         const connection = await pool.getConnection();
@@ -22,7 +20,6 @@ const initializeDatabase = async () => {
         connection.release();
     } catch (error) {
         console.error('❌ Erro ao conectar com o banco de dados:', error.message);
-        console.log('💡 Dica: Verifique se o MySQL está rodando e se o banco ifeco_monitor existe');
         process.exit(1);
     }
 };

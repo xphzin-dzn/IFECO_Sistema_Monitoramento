@@ -1,26 +1,38 @@
 const { pool } = require('../db');
 
 const dataController = {
-    // Salvar dados dos sensores
+    getHealth: async (req, res) => {
+        try {
+            const [result] = await pool.execute('SELECT 1 as health');
+            res.json({
+                success: true,
+                message: 'API e banco de dados funcionando',
+                database: result[0].health === 1 ? 'conectado' : 'erro',
+                timestamp: new Date().toISOString()
+            });
+        } catch (error) {
+            res.status(500).json({
+                success: false,
+                message: 'Erro na verificação de saúde',
+                error: error.message
+            });
+        }
+    },
+
     saveData: async (req, res) => {
         try {
-            console.log('📥 Dados recebidos:', req.body);
-            
             const { dados } = req.body;
             const userId = req.user.userId;
 
-            // Validação
             if (!dados || !Array.isArray(dados)) {
                 return res.status(400).json({
                     success: false,
-                    message: 'Dados inválidos. Esperado array de leituras.',
-                    received: req.body
+                    message: 'Dados inválidos. Esperado array de leituras.'
                 });
             }
 
             let savedCount = 0;
 
-            // Inserir cada leitura no banco
             for (const leitura of dados) {
                 try {
                     await pool.execute(
@@ -52,13 +64,11 @@ const dataController = {
             console.error('Erro ao salvar dados:', error);
             res.status(500).json({
                 success: false,
-                message: 'Erro interno do servidor',
-                error: error.message
+                message: 'Erro interno do servidor'
             });
         }
     },
 
-    // Buscar dados recentes
     getRecentData: async (req, res) => {
         try {
             const userId = req.user.userId;
@@ -80,15 +90,14 @@ const dataController = {
 
             res.json({
                 success: true,
-                data: leituras.reverse() // Ordenar do mais antigo para o mais recente
+                data: leituras.reverse()
             });
 
         } catch (error) {
             console.error('Erro ao buscar dados:', error);
             res.status(500).json({
                 success: false,
-                message: 'Erro interno do servidor',
-                error: error.message
+                message: 'Erro interno do servidor'
             });
         }
     }

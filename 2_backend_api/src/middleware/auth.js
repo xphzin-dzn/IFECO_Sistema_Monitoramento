@@ -2,7 +2,7 @@ const jwt = require('jsonwebtoken');
 
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1]; // Formato: "Bearer TOKEN"
+    const token = authHeader && authHeader.split(' ')[1];
 
     if (!token) {
         return res.status(401).json({ 
@@ -19,7 +19,7 @@ const authenticateToken = (req, res, next) => {
             });
         }
         
-        req.user = user; // Adiciona informações do usuário à requisição
+        req.user = user;
         next();
     });
 };
