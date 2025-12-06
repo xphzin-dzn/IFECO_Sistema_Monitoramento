@@ -60,6 +60,13 @@ const userController = {
                 });
             }
 
+            if (!process.env.JWT_SECRET) {
+                return res.status(500).json({
+                    success: false,
+                    message: 'Configuração do servidor incompleta'
+                });
+            }
+
             const [users] = await pool.execute(
                 'SELECT * FROM usuarios WHERE email = ?',
                 [email]
@@ -88,7 +95,7 @@ const userController = {
                     email: user.email 
                 },
                 process.env.JWT_SECRET,
-                { expiresIn: process.env.JWT_EXPIRES_IN }
+                { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
             );
 
             res.json({

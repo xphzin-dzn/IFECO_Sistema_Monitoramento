@@ -11,6 +11,13 @@ const authenticateToken = (req, res, next) => {
         });
     }
 
+    if (!process.env.JWT_SECRET) {
+        return res.status(500).json({ 
+            success: false,
+            message: 'Configuração de segurança não inicializada' 
+        });
+    }
+
     jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
         if (err) {
             return res.status(403).json({ 
