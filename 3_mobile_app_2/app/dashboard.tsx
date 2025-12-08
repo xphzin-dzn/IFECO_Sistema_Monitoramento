@@ -1,10 +1,10 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, StatusBar } from 'react-native';
-import { useRouter } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons'; // Ícones para deixar bonito
-import api from '../src/services/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import { Alert, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useBLE } from '../src/hooks/useBle';
+import api from '../src/services/api';
 
 export default function Dashboard() {
   const router = useRouter();
@@ -69,17 +69,22 @@ export default function Dashboard() {
     }
   };
 
+
+  // setar intervalo de 5 segundos com useEffect
+  
+
   // Efeito que roda o envio a cada 5 segundos SE estiver conectado
   useEffect(() => {
-    let intervalo: NodeJS.Timeout;
+    let interval: any;
 
     if (status === 'Conectado') {
       interval = setInterval(() => {
+        console.log("Enviando telemetria...");
         enviarTelemetria();
       }, 5000); // 5000ms = 5 segundos
     }
 
-    return () => clearInterval(intervalo);
+    return () => clearInterval(interval);
   }, [status, dadosVeiculo]);
 
 
