@@ -8,8 +8,8 @@
         {
             "name": "PlatformIO",
             "includePath": [
-                "C:/Users/pedro/OneDrive/Documentos/IFECO_Sistema_Monitoramento/include",
-                "C:/Users/pedro/OneDrive/Documentos/IFECO_Sistema_Monitoramento/src",
+                "C:/Users/pedro/IFECO_Sistema_Monitoramento/include",
+                "C:/Users/pedro/IFECO_Sistema_Monitoramento/src",
                 "C:/Users/pedro/.platformio/packages/framework-arduinoespressif32/libraries/BLE/src",
                 "C:/Users/pedro/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/newlib/platform_include",
                 "C:/Users/pedro/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/freertos/include",
@@ -244,8 +244,8 @@
             "browse": {
                 "limitSymbolsToIncludedHeaders": true,
                 "path": [
-                    "C:/Users/pedro/OneDrive/Documentos/IFECO_Sistema_Monitoramento/include",
-                    "C:/Users/pedro/OneDrive/Documentos/IFECO_Sistema_Monitoramento/src",
+                    "C:/Users/pedro/IFECO_Sistema_Monitoramento/include",
+                    "C:/Users/pedro/IFECO_Sistema_Monitoramento/src",
                     "C:/Users/pedro/.platformio/packages/framework-arduinoespressif32/libraries/BLE/src",
                     "C:/Users/pedro/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/newlib/platform_include",
                     "C:/Users/pedro/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/freertos/include",
