@@ -1,20 +1,20 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
-import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage'; // O Cofre
+import { useRouter } from 'expo-router';
+import React, { useState } from 'react';
+import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import api from '../src/services/api';
 
 export default function LoginScreen() {
   const router = useRouter();
-  
+
   // DICA: Deixei preenchido para facilitar seus testes, apague antes da banca!
-  const [email, setEmail] = useState('admin@ifeco.com'); 
+  const [email, setEmail] = useState('admin@ifeco.com');
   const [password, setPassword] = useState('123456');
   const [loading, setLoading] = useState(false);
 
   async function handleLogin() {
     if (!email || !password) {
-      Alert.alert('Erro', 'Preencha todos os campos');
+      Alert.alert('Erro', 'Preencha todos os campos para continuar.');
       return;
     }
 
@@ -23,7 +23,7 @@ export default function LoginScreen() {
     try {
       // 1. Bate na rota definida no seu backend
       console.log(`Tentando logar em ${api.defaults.baseURL}/login...`);
-      const response = await api.post('/login', { email, password });
+      const response = await api.post('/login', { email, senha: password });
 
       // 2. Se deu certo, o backend devolve o token (conforme seu controller)
       const { token } = response.data;
@@ -31,7 +31,7 @@ export default function LoginScreen() {
       if (token) {
         // 3. Guardamos o token no "Cofre" do celular
         await AsyncStorage.setItem('@ifeco_token', token);
-        
+
         // 4. Configura o axios para sempre usar esse token daqui pra frente
         api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
 
@@ -53,9 +53,9 @@ export default function LoginScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>IFECO<Text style={styles.subtitle}>Telemetry</Text></Text>
-      
+
       <View style={styles.inputContainer}>
-        <TextInput 
+        <TextInput
           style={styles.input}
           placeholder="E-mail"
           placeholderTextColor="#666"
@@ -63,7 +63,7 @@ export default function LoginScreen() {
           onChangeText={setEmail}
           autoCapitalize="none"
         />
-        <TextInput 
+        <TextInput
           style={styles.input}
           placeholder="Senha"
           placeholderTextColor="#666"
