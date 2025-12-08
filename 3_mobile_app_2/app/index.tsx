@@ -14,7 +14,7 @@ export default function LoginScreen() {
 
   async function handleLogin() {
     if (!email || !password) {
-      Alert.alert('Erro', 'Preencha todos os campos');
+      Alert.alert('Erro', 'Preencha todos os campos para continuar.');
       return;
     }
 
