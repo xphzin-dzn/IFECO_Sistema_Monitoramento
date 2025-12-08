@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // ATENÇÃO: Troque pelo SEU IPV4 do computador. Não use localhost.
-const API_URL = 'http://10.0.85.219:3000'; 
+const API_URL = 'http://192.168.2.109:3000/api'; 
 
 const api = axios.create({
   baseURL: API_URL,
