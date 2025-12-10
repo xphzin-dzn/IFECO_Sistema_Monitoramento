@@ -3,13 +3,14 @@ import ReactDOM from 'react-dom/client';
 import './index.css';
 
 // Importa as telas
-import DashboardScreen from './pages/DashboardScreen.tsx'; // Importado o Dashboard
+// import DashboardScreen from './pages/DashboardScreen.tsx'; // <-- REMOVIDO
 import LoginScreen from './pages/LoginScreen.tsx';
 import RegistrationScreen from './pages/RegistrationScreen.tsx';
 
 // Componente Wrapper para gerenciar a visualização e autenticação
 const AuthFlowManager: React.FC = () => {
   // Estado para 'login', 'register' ou 'dashboard'
+  // 'dashboard' é mantido para consistência do useEffect, mas será tratado
   const [view, setView] = useState<'login' | 'register' | 'dashboard'>('login');
   const [userName, setUserName] = useState(''); // Estado para o nome do usuário
 
@@ -20,7 +21,10 @@ const AuthFlowManager: React.FC = () => {
 
     if (token && name) {
       setUserName(name);
-      setView('dashboard');
+      // Aqui, se o Dashboard for removido, redirecionamos para login
+      // ou mantemos o estado de login se ele for reintroduzido.
+      // Para evitar erro de componente, forçamos 'login' por enquanto.
+      setView('login');
     }
   }, []);
 
@@ -28,7 +32,10 @@ const AuthFlowManager: React.FC = () => {
 
   const handleLoginSuccess = (token: string, user: { nome: string }) => {
     setUserName(user.nome);
-    setView('dashboard');
+    // Ação alternativa para sucesso de login, pois o Dashboard foi removido.
+    // Aqui, forçamos o retorno à tela de login e exibimos um alerta.
+    setView('login');
+    alert(`Login bem-sucedido, ${user.nome}! (Redirecionamento para Dashboard desativado)`);
   };
 
   const handleLogout = () => {
@@ -41,10 +48,12 @@ const AuthFlowManager: React.FC = () => {
   };
 
   const renderScreen = () => {
+    // O DashboardScreen foi removido desta função de renderização.
     if (view === 'dashboard') {
-      return <DashboardScreen
-        onLogout={handleLogout}
-        userName={userName} // Passa o nome para o Header
+      // Retorna para login se a rota 'dashboard' for acionada acidentalmente
+      return <LoginScreen
+        onSwitchToRegister={() => setView('register')}
+        onLoginSuccess={handleLoginSuccess}
       />;
     }
 
@@ -57,7 +66,7 @@ const AuthFlowManager: React.FC = () => {
     if (view === 'login') {
       return <LoginScreen
         onSwitchToRegister={() => setView('register')}
-        onLoginSuccess={handleLoginSuccess} // Passa o novo callback
+        onLoginSuccess={handleLoginSuccess}
       />;
     }
 
