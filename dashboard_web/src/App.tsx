@@ -1,23 +1,26 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, ComposedChart, Area, Bar
 } from 'recharts';
 import {
-  Bluetooth, BluetoothConnected, Circle, Square, Upload,
-  Download, Activity, Thermometer, Zap, Battery, Clock,
-  Play, Pause, Trash2, BarChart3, Home, Wifi, WifiOff
-} from 'lucide-react';
+  Bluetooth, BluetoothConnected, Circle, Square, 
+  Download, Activity, Thermometer, Zap, Clock,
+  Play, Trash2, BarChart3, Home, WifiOff
+} from 'lucide-react'; 
+import useWebBle from './hooks/useWebBle'; 
 
-// Tipos
-type SensorType = 'temp' | 'vol' | 'curr' | 'spd';
-type ViewMode = 'DISCONNECTED' | 'CONNECTED_IDLE' | 'RECORDING' | 'UPLOADING' | 'DASHBOARD_VIEW';
+// --- TIPOS E CONSTANTES ---
 
-interface SensorData {
+const TARGET_DEVICE_NAME = 'IFECO_TELEMETRIA';
+
+interface CombinedSensorData {
   timestamp: number;
-  type: SensorType;
-  value: number;
+  velocidade: number; // km/h
+  tensao: number; // Volts (V)
+  corrente: number; // Amperes (A)
+  temperatura: number; // Graus Celsius
 }
 
 interface SessionData {
@@ -25,193 +28,168 @@ interface SessionData {
   startTime: number;
   endTime: number;
   dataPoints: number;
-  data: SensorData[];
+  data: CombinedSensorData[];
 }
+
+type ViewMode = 'DISCONNECTED' | 'CONNECTED_IDLE' | 'RECORDING' | 'UPLOADING' | 'DASHBOARD_VIEW' | 'ERRO_BLE';
+
+// --- INTERFACES PARA COMPONENTES AUXILIARES ---
+
+interface MetricCardProps {
+    icon: React.ElementType;
+    label: string;
+    value: string;
+    unit: string;
+    color: 'green' | 'yellow' | 'blue' | 'red';
+}
+
+interface ChartSectionProps {
+    title: string;
+    icon: React.ElementType;
+    children: React.ReactNode;
+}
+
+interface LoadingSpinnerProps {
+    message: string;
+}
+
+// Componente auxiliar para Card de Métrica
+const MetricCard: React.FC<MetricCardProps> = ({ icon: Icon, label, value, unit, color }) => (
+  <div className="bg-white p-4 rounded-lg border shadow-sm flex flex-col items-center justify-center">
+      <Icon className={`w-6 h-6 text-${color}-500 mb-2`} />
+      <h4 className="font-medium text-sm text-gray-600">{label}</h4>
+      <div className="text-3xl font-bold text-gray-800 mt-1">{value}</div>
+      <div className="text-sm text-gray-500">{unit}</div>
+  </div>
+);
+
+// Componente auxiliar para a seção de gráficos
+const ChartSection: React.FC<ChartSectionProps> = ({ title, icon: Icon, children }) => (
+  <div className="bg-white rounded-lg border shadow-sm p-6">
+      <h3 className="text-lg font-semibold text-gray-800 mb-6 flex items-center gap-2">
+          <Icon className="w-5 h-5" /> 
+          {title}
+      </h3>
+      <div className="h-80">
+          <ResponsiveContainer width="100%" height="100%">
+              {children}
+          </ResponsiveContainer>
+      </div>
+  </div>
+);
+
+// Componente auxiliar para spinner
+const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({ message }) => (
+    <div className="text-center py-12">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+        <p className="mt-4 text-gray-600">{message}</p>
+    </div>
+);
+
 
 // Componente principal
 function App() {
+  // --- INTEGRAÇÃO DO HOOK WEB BLE ---
+  const { dadosVeiculo, status: bleStatus, conectarDispositivo, desconectarDispositivo } = useWebBle();
+  
   // Estados principais
   const [viewMode, setViewMode] = useState<ViewMode>('DISCONNECTED');
-  const [device, setDevice] = useState<BluetoothDevice | null>(null);
-  const [server, setServer] = useState<BluetoothRemoteGATTServer | null>(null);
   
-  // Dados da sessão atual
-  const sessionDataRef = useRef<SensorData[]>([]);
+  // Dados da sessão atual (Ref para gravação eficiente)
+  const sessionDataRef = useRef<CombinedSensorData[]>([]);
   const [packetCount, setPacketCount] = useState(0);
   const [recordingTime, setRecordingTime] = useState(0);
-  const [recordingInterval, setRecordingInterval] = useState<NodeJS.Timeout | null>(null);
+  const [recordingInterval, setRecordingInterval] = useState<number | null>(null);
   
   // Dados históricos (dashboard)
   const [sessionHistory, setSessionHistory] = useState<SessionData | null>(null);
-  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  // O estado 'isLoadingHistory' foi removido
   
-  // Métricas em tempo real (apenas contadores)
-  const [sensorCounts, setSensorCounts] = useState({
-    temp: 0,
-    vol: 0,
-    curr: 0,
-    spd: 0
-  });
+  // Variável para armazenar o tempo de início da gravação
+  const startTimeRef = useRef(0);
+
+  // Limpar sessão atual
+  const clearSession = useCallback(() => {
+    sessionDataRef.current = [];
+    setPacketCount(0);
+    setRecordingTime(0);
+    if (recordingInterval) clearInterval(recordingInterval);
+    setSessionHistory(null);
+    startTimeRef.current = 0;
+  }, [recordingInterval]);
 
   // Iniciar temporizador de gravação
-  const startRecordingTimer = () => {
+  const startRecordingTimer = useCallback(() => {
     if (recordingInterval) clearInterval(recordingInterval);
+    
+    startTimeRef.current = Date.now();
     
     const interval = setInterval(() => {
       setRecordingTime(prev => prev + 1);
     }, 1000);
     
-    setRecordingInterval(interval);
-  };
+    setRecordingInterval(interval as unknown as number);
+  }, [recordingInterval]);
 
   // Parar temporizador
-  const stopRecordingTimer = () => {
+  const stopRecordingTimer = useCallback(() => {
     if (recordingInterval) {
       clearInterval(recordingInterval);
       setRecordingInterval(null);
     }
-  };
+  }, [recordingInterval]);
 
-  // Conectar ao dispositivo Bluetooth
-  const connectToDevice = async () => {
-    try {
-      console.log('Procurando dispositivos Bluetooth...');
-      
-      const device = await navigator.bluetooth.requestDevice({
-        filters: [{ namePrefix: 'ESP32' }],
-        optionalServices: ['0000ffe0-0000-1000-8000-00805f9b34fb']
-      });
-
-      const server = await device.gatt?.connect();
-      
-      setDevice(device);
-      setServer(server || null);
-      setViewMode('CONNECTED_IDLE');
-      
-      // Adicionar listener para desconexão
-      device.addEventListener('gattserverdisconnected', () => {
-        setViewMode('DISCONNECTED');
-        setDevice(null);
-        setServer(null);
-      });
-
-    } catch (error) {
-      console.error('Erro na conexão Bluetooth:', error);
-      alert('Falha ao conectar. Certifique-se que o dispositivo está pareado e visível.');
-    }
-  };
-
-  // Desconectar
-  const disconnectDevice = () => {
-    if (device) {
-      device.gatt?.disconnect();
-      setViewMode('DISCONNECTED');
-      setDevice(null);
-      setServer(null);
-    }
-  };
-
-  // Parser de dados Bluetooth
-  const parseBluetoothData = (value: DataView): SensorData | null => {
-    try {
-      // Decodificar os dados como string UTF-8
-      const decoder = new TextDecoder('utf-8');
-      const jsonString = decoder.decode(value);
-      
-      // Tentar parsear como JSON
-      const data = JSON.parse(jsonString);
-      
-      // Validar estrutura
-      if (data.type && typeof data.val === 'number') {
-        const sensorType = data.type as SensorType;
-        
-        // Atualizar contador por tipo
-        setSensorCounts(prev => ({
-          ...prev,
-          [sensorType]: prev[sensorType] + 1
-        }));
-        
-        return {
-          timestamp: Date.now(),
-          type: sensorType,
-          value: data.val
-        };
+  
+  // --- LÓGICA DE SINCRONIZAÇÃO DE ESTADO ---
+  useEffect(() => {
+      // Sincroniza o viewMode com o status do hook useWebBle
+      if (bleStatus === 'Navegador Incompatível' || bleStatus === 'Erro') {
+          setViewMode('ERRO_BLE');
+      } else if (bleStatus === 'Conectado') {
+          if (viewMode !== 'RECORDING') {
+             setViewMode('CONNECTED_IDLE');
+          }
+      } else if (bleStatus === 'Desconectado' || bleStatus === 'Pronto') {
+          setViewMode('DISCONNECTED');
+          clearSession(); 
       }
-    } catch (error) {
-      console.warn('Dados recebidos não são JSON válido:', error);
       
-      // Fallback: Simular dados para demonstração
-      const mockTypes: SensorType[] = ['temp', 'vol', 'curr', 'spd'];
-      const randomType = mockTypes[Math.floor(Math.random() * mockTypes.length)];
-      const mockValue = randomType === 'temp' ? 20 + Math.random() * 10 :
-                       randomType === 'vol' ? 12 + Math.random() * 2 :
-                       randomType === 'curr' ? 1 + Math.random() * 3 :
-                       0 + Math.random() * 100;
-      
-      setSensorCounts(prev => ({
-        ...prev,
-        [randomType]: prev[randomType] + 1
-      }));
-      
-      return {
-        timestamp: Date.now(),
-        type: randomType,
-        value: mockValue
-      };
-    }
-    
-    return null;
-  };
+      if (bleStatus === 'Desconectado' && recordingInterval) {
+          stopRecordingTimer();
+      }
+  }, [bleStatus, viewMode, recordingInterval, clearSession, stopRecordingTimer]);
+
+
+  // --- EFEITO DE GRAVAÇÃO: CAPTURA DADOS DO HOOK QUANDO EM RECORDING ---
+  useEffect(() => {
+      if (viewMode === 'RECORDING' && dadosVeiculo.velocidade !== 0) { 
+          
+          const newCombinedData: CombinedSensorData = {
+              timestamp: Date.now(), 
+              velocidade: dadosVeiculo.velocidade,
+              tensao: dadosVeiculo.tensao,
+              corrente: dadosVeiculo.corrente,
+              temperatura: dadosVeiculo.temperatura
+          };
+
+          sessionDataRef.current.push(newCombinedData);
+          setPacketCount(prev => prev + 1);
+      }
+  }, [dadosVeiculo.velocidade, dadosVeiculo.tensao, dadosVeiculo.corrente, dadosVeiculo.temperatura, viewMode]);
+
 
   // Iniciar gravação
   const startRecording = async () => {
-    if (!server) return;
+    if (bleStatus !== 'Conectado') return;
 
     try {
       // Resetar dados da sessão
       sessionDataRef.current = [];
       setPacketCount(0);
       setRecordingTime(0);
-      setSensorCounts({ temp: 0, vol: 0, curr: 0, spd: 0 });
       
       // Iniciar temporizador
       startRecordingTimer();
-      
-      // Simular recebimento de dados (em produção, substituir pelo GATT Characteristic)
-      const simulationInterval = setInterval(() => {
-        // Simular diferentes taxas de amostragem
-        const now = Date.now();
-        
-        // Temperatura a cada 5 segundos
-        if (recordingTime % 5 === 0) {
-          const tempData = parseBluetoothData(new DataView(new ArrayBuffer(0)))!;
-          if (tempData) {
-            tempData.type = 'temp';
-            tempData.value = 20 + Math.random() * 10;
-            sessionDataRef.current.push(tempData);
-            setPacketCount(prev => prev + 1);
-          }
-        }
-        
-        // Outros sensores a cada 2 segundos
-        if (recordingTime % 2 === 0) {
-          const types: SensorType[] = ['vol', 'curr', 'spd'];
-          types.forEach(type => {
-            const data = parseBluetoothData(new DataView(new ArrayBuffer(0)))!;
-            if (data) {
-              data.type = type;
-              data.value = type === 'vol' ? 12 + Math.random() * 2 :
-                          type === 'curr' ? 1 + Math.random() * 3 :
-                          type === 'spd' ? Math.random() * 100 : 0;
-              sessionDataRef.current.push(data);
-              setPacketCount(prev => prev + 1);
-            }
-          });
-        }
-      }, 1000); // Verificação a cada segundo
-
-      // Guardar intervalo para limpeza
-      setRecordingInterval(simulationInterval as unknown as NodeJS.Timeout);
       
       setViewMode('RECORDING');
       
@@ -226,48 +204,39 @@ function App() {
     stopRecordingTimer();
     setViewMode('UPLOADING');
     
+    const endTime = Date.now();
+    
     try {
       const sessionData: SessionData = {
-        sessionId: `session_${Date.now()}`,
-        startTime: Date.now() - (recordingTime * 1000),
-        endTime: Date.now(),
+        sessionId: `session_${startTimeRef.current}`,
+        startTime: startTimeRef.current,
+        endTime: endTime,
         dataPoints: packetCount,
         data: sessionDataRef.current
       };
 
-      // Enviar para o backend
+      // Simulação do envio para o backend
+      // Se o backend existir, o Axios enviará os dados
       await axios.post('http://localhost:3000/api/save-session', sessionData);
       
-      // Buscar dados salvos para exibição
-      await fetchSessionData(sessionData.sessionId);
+      // Simulação da busca de dados
+      setSessionHistory(sessionData);
       
       setViewMode('DASHBOARD_VIEW');
       
     } catch (error) {
-      console.error('Erro ao enviar dados:', error);
-      alert('Erro ao enviar dados para o servidor');
-      setViewMode('CONNECTED_IDLE');
-    }
-  };
-
-  // Buscar dados da sessão
-  const fetchSessionData = async (sessionId: string) => {
-    setIsLoadingHistory(true);
-    try {
-      const response = await axios.get(`http://localhost:3000/api/sessions/${sessionId}`);
-      setSessionHistory(response.data);
-    } catch (error) {
-      console.error('Erro ao buscar dados da sessão:', error);
-      // Para demonstração, usar dados locais
+      console.error('Erro ao enviar dados para o servidor:', error);
+      alert('Erro ao enviar dados para o servidor. Exibindo dados coletados localmente.');
+      
+      // Se falhar, exibe os dados coletados localmente
       setSessionHistory({
-        sessionId,
-        startTime: Date.now() - (recordingTime * 1000),
-        endTime: Date.now(),
-        dataPoints: packetCount,
-        data: sessionDataRef.current
+          sessionId: `session_${startTimeRef.current}`,
+          startTime: startTimeRef.current,
+          endTime: endTime,
+          dataPoints: packetCount,
+          data: sessionDataRef.current
       });
-    } finally {
-      setIsLoadingHistory(false);
+      setViewMode('DASHBOARD_VIEW');
     }
   };
 
@@ -279,64 +248,56 @@ function App() {
   };
 
   // Preparar dados para gráficos
-  const prepareChartData = () => {
+  const prepareChartData = useCallback(() => {
     if (!sessionHistory?.data) return [];
     
-    // Agrupar dados por timestamp mais próximo
-    const timeGroups = new Map<number, any>();
+    const chartData = sessionHistory.data.map(item => ({
+      timestamp: item.timestamp,
+      time: new Date(item.timestamp).toLocaleTimeString([], { minute: '2-digit', second: '2-digit' }),
+      temperature: item.temperatura,
+      voltage: item.tensao,
+      current: item.corrente,
+      speed: item.velocidade
+    }));
     
-    sessionHistory.data.forEach(item => {
-      // Arredondar timestamp para o segundo mais próximo
-      const roundedTime = Math.floor(item.timestamp / 1000) * 1000;
-      
-      if (!timeGroups.has(roundedTime)) {
-        timeGroups.set(roundedTime, {
-          timestamp: roundedTime,
-          time: new Date(roundedTime).toLocaleTimeString([], { minute: '2-digit', second: '2-digit' }),
-          temperature: null,
-          voltage: null,
-          current: null,
-          speed: null
-        });
-      }
-      
-      const group = timeGroups.get(roundedTime);
-      switch(item.type) {
-        case 'temp': group.temperature = item.value; break;
-        case 'vol': group.voltage = item.value; break;
-        case 'curr': group.current = item.value; break;
-        case 'spd': group.speed = item.value; break;
-      }
-    });
-    
-    return Array.from(timeGroups.values()).sort((a, b) => a.timestamp - b.timestamp);
-  };
+    return chartData.sort((a, b) => a.timestamp - b.timestamp);
+  }, [sessionHistory]);
 
-  // Limpar sessão atual
-  const clearSession = () => {
-    sessionDataRef.current = [];
-    setPacketCount(0);
-    setRecordingTime(0);
-    setSensorCounts({ temp: 0, vol: 0, curr: 0, spd: 0 });
-    stopRecordingTimer();
-    setSessionHistory(null);
-  };
 
   // Renderizar baseado no estado atual
   const renderView = () => {
     switch(viewMode) {
+      case 'ERRO_BLE':
+        return (
+            <div className="text-center py-12">
+                <WifiOff className="w-24 h-24 mx-auto text-red-500 mb-6" />
+                <h2 className="text-2xl font-bold text-red-700 mb-4">Erro de Compatibilidade</h2>
+                <p className="text-red-600 mb-8">
+                    A Web Bluetooth API não é suportada ou o Bluetooth está desligado.
+                    Use Google Chrome ou Edge e acesse via **https://** ou **localhost**.
+                </p>
+                <button
+                    onClick={() => window.location.reload()}
+                    className="px-8 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center mx-auto gap-2"
+                >
+                    Recarregar Página
+                </button>
+            </div>
+        );
+
       case 'DISCONNECTED':
         return (
           <div className="text-center py-12">
             <WifiOff className="w-24 h-24 mx-auto text-gray-400 mb-6" />
             <h2 className="text-2xl font-bold text-gray-700 mb-4">Desconectado</h2>
-            <p className="text-gray-600 mb-8">Conecte-se a um dispositivo ESP32 para iniciar o monitoramento</p>
+            <p className="text-gray-600 mb-8">Conecte-se ao **{TARGET_DEVICE_NAME}** para iniciar</p>
             <button
-              onClick={connectToDevice}
+              onClick={conectarDispositivo} 
               className="px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center mx-auto gap-2"
+              disabled={bleStatus === 'Escaneando' || bleStatus === 'Conectando'}
             >
               <Bluetooth className="w-5 h-5" />
-              Conectar Dispositivo
+              {bleStatus === 'Escaneando' ? 'Escaneando...' : bleStatus === 'Conectando' ? 'Conectando...' : 'Conectar Dispositivo'}
             </button>
           </div>
         );
@@ -347,26 +308,8 @@ function App() {
             <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-3">
               <BluetoothConnected className="w-6 h-6 text-green-600" />
               <div>
-                <h3 className="font-semibold text-green-800">Conectado</h3>
+                <h3 className="font-semibold text-green-800">Conectado ao {TARGET_DEVICE_NAME}</h3>
                 <p className="text-green-600 text-sm">Pronto para iniciar gravação</p>
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-white p-4 rounded-lg border shadow-sm">
-                <div className="flex items-center gap-2 mb-2">
-                  <Activity className="w-5 h-5 text-blue-500" />
-                  <h4 className="font-medium">Status do Dispositivo</h4>
-                </div>
-                <p className="text-sm text-gray-600">ESP32 conectado via Bluetooth</p>
-              </div>
-              
-              <div className="bg-white p-4 rounded-lg border shadow-sm">
-                <div className="flex items-center gap-2 mb-2">
-                  <Clock className="w-5 h-5 text-purple-500" />
-                  <h4 className="font-medium">Última Sessão</h4>
-                </div>
-                <p className="text-sm text-gray-600">Nenhuma sessão gravada</p>
               </div>
             </div>
             
@@ -379,7 +322,7 @@ function App() {
                 Iniciar Gravação
               </button>
               <button
-                onClick={disconnectDevice}
+                onClick={desconectarDispositivo} 
                 className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 Desconectar
@@ -389,7 +332,6 @@ function App() {
         );
 
       case 'RECORDING':
-        const chartData = prepareChartData();
         return (
           <div className="space-y-6">
             {/* Banner de gravação ativa */}
@@ -403,7 +345,7 @@ function App() {
                 </div>
                 <div>
                   <h3 className="font-semibold text-red-800">Gravando...</h3>
-                  <p className="text-red-600 text-sm">Coletando dados dos sensores</p>
+                  <p className="text-red-600 text-sm">Coletando dados: {packetCount} pontos</p>
                 </div>
               </div>
               <div className="text-right">
@@ -412,50 +354,13 @@ function App() {
               </div>
             </div>
 
-            {/* Métricas de coleta */}
+            {/* Métricas de coleta EM TEMPO REAL (Dados do Hook) */}
+            <h4 className="font-semibold text-gray-800 mt-6">Monitoramento ao Vivo</h4>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="bg-white p-4 rounded-lg border shadow-sm">
-                <div className="flex items-center gap-2 mb-2">
-                  <Activity className="w-5 h-5 text-blue-500" />
-                  <h4 className="font-medium">Pacotes</h4>
-                </div>
-                <div className="text-2xl font-bold text-gray-800">{packetCount}</div>
-              </div>
-              
-              <div className="bg-white p-4 rounded-lg border shadow-sm">
-                <div className="flex items-center gap-2 mb-2">
-                  <Thermometer className="w-5 h-5 text-red-500" />
-                  <h4 className="font-medium">Temperatura</h4>
-                </div>
-                <div className="text-2xl font-bold text-gray-800">{sensorCounts.temp}</div>
-                <div className="text-sm text-gray-500">amostras</div>
-              </div>
-              
-              <div className="bg-white p-4 rounded-lg border shadow-sm">
-                <div className="flex items-center gap-2 mb-2">
-                  <Zap className="w-5 h-5 text-yellow-500" />
-                  <h4 className="font-medium">Energia</h4>
-                </div>
-                <div className="flex gap-4">
-                  <div>
-                    <div className="text-lg font-bold text-gray-800">{sensorCounts.vol}</div>
-                    <div className="text-xs text-gray-500">Volts</div>
-                  </div>
-                  <div>
-                    <div className="text-lg font-bold text-gray-800">{sensorCounts.curr}</div>
-                    <div className="text-xs text-gray-500">Amps</div>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="bg-white p-4 rounded-lg border shadow-sm">
-                <div className="flex items-center gap-2 mb-2">
-                  <Activity className="w-5 h-5 text-green-500" />
-                  <h4 className="font-medium">Velocidade</h4>
-                </div>
-                <div className="text-2xl font-bold text-gray-800">{sensorCounts.spd}</div>
-                <div className="text-sm text-gray-500">amostras</div>
-              </div>
+              <MetricCard icon={Activity} label="Velocidade" value={dadosVeiculo.velocidade.toFixed(1)} unit="km/h" color="green" />
+              <MetricCard icon={Zap} label="Tensão" value={dadosVeiculo.tensao.toFixed(1)} unit="V" color="yellow" />
+              <MetricCard icon={Zap} label="Corrente" value={dadosVeiculo.corrente.toFixed(1)} unit="A" color="blue" />
+              <MetricCard icon={Thermometer} label="Temperatura" value={dadosVeiculo.temperatura.toFixed(1)} unit="°C" color="red" />
             </div>
 
             {/* Controles de gravação */}
@@ -465,7 +370,7 @@ function App() {
                 className="flex-1 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
               >
                 <Square className="w-5 h-5" />
-                Parar e Salvar
+                Parar e Salvar ({packetCount} pts)
               </button>
               <button
                 onClick={() => {
@@ -476,7 +381,7 @@ function App() {
                 className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
               >
                 <Trash2 className="w-5 h-5" />
-                Cancelar
+                Cancelar Gravação
               </button>
             </div>
           </div>
@@ -503,7 +408,7 @@ function App() {
             <div className="bg-white rounded-lg border shadow-sm p-6">
               <div className="flex justify-between items-start">
                 <div>
-                  <h2 className="text-xl font-bold text-gray-800">Sessão de Monitoramento</h2>
+                  <h2 className="text-xl font-bold text-gray-800">Sessão de Análise</h2>
                   <div className="flex items-center gap-4 mt-2 text-sm text-gray-600">
                     <div className="flex items-center gap-1">
                       <Clock className="w-4 h-4" />
@@ -515,7 +420,7 @@ function App() {
                     </div>
                     <div className="flex items-center gap-1">
                       <Download className="w-4 h-4" />
-                      <span>{new Date().toLocaleDateString()}</span>
+                      <span>{new Date(sessionHistory?.endTime || Date.now()).toLocaleDateString()}</span>
                     </div>
                   </div>
                 </div>
@@ -530,75 +435,56 @@ function App() {
             </div>
 
             {/* Gráficos */}
-            {isLoadingHistory ? (
-              <div className="text-center py-12">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-                <p className="mt-4 text-gray-600">Carregando dados da sessão...</p>
-              </div>
-            ) : dashboardData.length > 0 ? (
+            {dashboardData.length > 0 ? (
               <div className="space-y-8">
-                {/* Gráfico 1: Tensão e Corrente */}
-                <div className="bg-white rounded-lg border shadow-sm p-6">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-6 flex items-center gap-2">
-                    <Zap className="w-5 h-5 text-yellow-500" />
-                    Tensão e Corrente
-                  </h3>
-                  <div className="h-80">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <ComposedChart data={dashboardData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                        <XAxis dataKey="time" />
-                        <YAxis yAxisId="left" label={{ value: 'Tensão (V)', angle: -90, position: 'insideLeft' }} />
-                        <YAxis yAxisId="right" orientation="right" label={{ value: 'Corrente (A)', angle: 90, position: 'insideRight' }} />
-                        <Tooltip />
-                        <Legend />
-                        <Area yAxisId="left" type="monotone" dataKey="voltage" stroke="#f59e0b" fill="#fef3c7" name="Tensão (V)" />
-                        <Line yAxisId="right" type="monotone" dataKey="current" stroke="#3b82f6" strokeWidth={2} name="Corrente (A)" />
-                      </ComposedChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
+                <ChartSection 
+                    title="Tensão e Corrente" 
+                    icon={Zap} 
+                    children={(
+                        <ComposedChart data={dashboardData}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                            <XAxis dataKey="time" />
+                            <YAxis yAxisId="left" label={{ value: 'Tensão (V)', angle: -90, position: 'insideLeft' }} />
+                            <YAxis yAxisId="right" orientation="right" label={{ value: 'Corrente (A)', angle: 90, position: 'insideRight' }} />
+                            <Tooltip />
+                            <Legend />
+                            <Area yAxisId="left" type="monotone" dataKey="voltage" stroke="#f59e0b" fill="#fef3c7" name="Tensão (V)" />
+                            <Line yAxisId="right" type="monotone" dataKey="current" stroke="#3b82f6" strokeWidth={2} name="Corrente (A)" />
+                        </ComposedChart>
+                    )}
+                />
 
-                {/* Gráfico 2: Velocidade */}
-                <div className="bg-white rounded-lg border shadow-sm p-6">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-6 flex items-center gap-2">
-                    <Activity className="w-5 h-5 text-green-500" />
-                    Velocidade
-                  </h3>
-                  <div className="h-80">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={dashboardData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                        <XAxis dataKey="time" />
-                        <YAxis label={{ value: 'Velocidade', angle: -90, position: 'insideLeft' }} />
-                        <Tooltip />
-                        <Legend />
-                        <Line type="monotone" dataKey="speed" stroke="#10b981" strokeWidth={3} name="Velocidade" dot={false} />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
+                <ChartSection 
+                    title="Velocidade" 
+                    icon={Activity} 
+                    children={(
+                        <LineChart data={dashboardData}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                            <XAxis dataKey="time" />
+                            <YAxis label={{ value: 'Velocidade (km/h)', angle: -90, position: 'insideLeft' }} />
+                            <Tooltip />
+                            <Legend />
+                            <Line type="monotone" dataKey="speed" stroke="#10b981" strokeWidth={3} name="Velocidade" dot={false} />
+                        </LineChart>
+                    )}
+                />
+                
+                <ChartSection 
+                    title="Temperatura" 
+                    icon={Thermometer} 
+                    children={(
+                        <ComposedChart data={dashboardData}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                            <XAxis dataKey="time" />
+                            <YAxis label={{ value: 'Temperatura (°C)', angle: -90, position: 'insideLeft' }} />
+                            <Tooltip />
+                            <Legend />
+                            <Bar dataKey="temperature" fill="#fca5a5" name="Temperatura (°C)" />
+                            <Line type="monotone" dataKey="temperature" stroke="#dc2626" strokeWidth={2} name="Tendência" />
+                        </ComposedChart>
+                    )}
+                />
 
-                {/* Gráfico 3: Temperatura */}
-                <div className="bg-white rounded-lg border shadow-sm p-6">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-6 flex items-center gap-2">
-                    <Thermometer className="w-5 h-5 text-red-500" />
-                    Temperatura
-                  </h3>
-                  <div className="h-80">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <ComposedChart data={dashboardData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                        <XAxis dataKey="time" />
-                        <YAxis label={{ value: 'Temperatura (°C)', angle: -90, position: 'insideLeft' }} />
-                        <Tooltip />
-                        <Legend />
-                        <Bar dataKey="temperature" fill="#fca5a5" name="Temperatura (°C)" />
-                        <Line type="monotone" dataKey="temperature" stroke="#dc2626" strokeWidth={2} name="Tendência" />
-                      </ComposedChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
               </div>
             ) : (
               <div className="text-center py-12 bg-white rounded-lg border">
@@ -622,11 +508,14 @@ function App() {
                 className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
               >
                 <Trash2 className="w-5 h-5" />
-                Limpar Dados
+                Limpar Dados (Local)
               </button>
             </div>
           </div>
         );
+      
+      default:
+        return null;
     }
   };
 
@@ -641,8 +530,8 @@ function App() {
                 <Bluetooth className="w-6 h-6 text-blue-600" />
               </div>
               <div>
-                <h1 className="text-xl font-bold text-gray-900">VFFCO IoT Monitor</h1>
-                <p className="text-sm text-gray-600">Sistema de Monitoramento Industrial</p>
+                <h1 className="text-xl font-bold text-gray-900">IFECO IoT Monitor</h1>
+                <p className="text-sm text-gray-600">Sistema de Monitoramento para o Protótipo</p>
               </div>
             </div>
             
@@ -651,35 +540,28 @@ function App() {
               <div className="px-3 py-1 rounded-full text-sm font-medium flex items-center gap-2"
                 style={{
                   backgroundColor: 
-                    viewMode === 'DISCONNECTED' ? '#f3f4f6' :
-                    viewMode === 'CONNECTED_IDLE' ? '#d1fae5' :
-                    viewMode === 'RECORDING' ? '#fee2e2' :
-                    viewMode === 'UPLOADING' ? '#fef3c7' :
+                    bleStatus === 'Desconectado' || bleStatus === 'Pronto' ? '#f3f4f6' :
+                    bleStatus === 'Conectado' ? '#d1fae5' :
+                    bleStatus === 'Escaneando' || bleStatus === 'Conectando' ? '#fef3c7' :
                     '#dbeafe',
                   color:
-                    viewMode === 'DISCONNECTED' ? '#6b7280' :
-                    viewMode === 'CONNECTED_IDLE' ? '#065f46' :
-                    viewMode === 'RECORDING' ? '#991b1b' :
-                    viewMode === 'UPLOADING' ? '#92400e' :
+                    bleStatus === 'Desconectado' || bleStatus === 'Pronto' ? '#6b7280' :
+                    bleStatus === 'Conectado' ? '#065f46' :
+                    bleStatus === 'Escaneando' || bleStatus === 'Conectando' ? '#92400e' :
                     '#1e40af'
                 }}
               >
                 <div className="w-2 h-2 rounded-full"
                   style={{
                     backgroundColor: 
-                      viewMode === 'DISCONNECTED' ? '#9ca3af' :
-                      viewMode === 'CONNECTED_IDLE' ? '#10b981' :
-                      viewMode === 'RECORDING' ? '#ef4444' :
-                      viewMode === 'UPLOADING' ? '#f59e0b' :
+                      bleStatus === 'Desconectado' || bleStatus === 'Pronto' ? '#9ca3af' :
+                      bleStatus === 'Conectado' ? '#10b981' :
+                      bleStatus === 'Escaneando' || bleStatus === 'Conectando' ? '#f59e0b' :
                       '#3b82f6'
                   }}
                 ></div>
                 <span>
-                  {viewMode === 'DISCONNECTED' ? 'Desconectado' :
-                   viewMode === 'CONNECTED_IDLE' ? 'Conectado' :
-                   viewMode === 'RECORDING' ? 'Gravando' :
-                   viewMode === 'UPLOADING' ? 'Enviando' :
-                   'Dashboard'}
+                  {bleStatus === 'Conectado' && viewMode === 'RECORDING' ? 'Em Gravação' : bleStatus}
                 </span>
               </div>
               
@@ -711,8 +593,8 @@ function App() {
 
         {/* Nota informativa */}
         <div className="mt-6 text-center text-sm text-gray-500">
-          <p>Sistema IoT VFFCO - Coleta e análise de dados de sensores em tempo real</p>
-          <p className="mt-1">Modo Store & Forward - Dados são coletados, armazenados e analisados posteriormente</p>
+          <p>O sistema foi adaptado para a Web Bluetooth API, eliminando a dependência do App Mobile.</p>
+          <p className="mt-1">Lembre-se: O código do ESP32 deve ser conectado manualmente no popup do navegador (gasto de energia da bateria do carro).</p>
         </div>
       </main>
     </div>
