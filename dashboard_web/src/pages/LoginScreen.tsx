@@ -1,38 +1,83 @@
+import axios from 'axios'; // Necessário para a chamada à API
+import { LogIn } from 'lucide-react'; // Ícone para o botão
 import React, { useState } from 'react';
-// Necessário para o ícone de Login no botão (assumindo que você usa Lucide)
-import { LogIn } from 'lucide-react';
 
-// Adicione a interface das Props
-interface LoginScreenProps {
-    onSwitchToRegister: () => void; // A função que muda o estado de visualização no main.tsx
+// Adicionado: Interface para os dados do usuário logado (nome é crucial para o Dashboard)
+interface UserData {
+    id: number;
+    email: string;
+    nome: string; // Nome do usuário
 }
 
-// Altere a assinatura do componente para aceitar as props
-const LoginScreen: React.FC<LoginScreenProps> = ({ onSwitchToRegister }) => {
+// 1. Interface de Props do LoginScreen
+interface LoginScreenProps {
+    onSwitchToRegister: () => void;
+    // NOVO: Callback para notificar o componente pai (main.tsx) do sucesso
+    onLoginSuccess: (token: string, user: UserData) => void;
+}
+
+const IFECO_GREEN = '#4CAF50';
+
+// 2. Altere a assinatura do componente para aceitar as props
+const LoginScreen: React.FC<LoginScreenProps> = ({ onSwitchToRegister, onLoginSuccess }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [message, setMessage] = useState('');
     const [isError, setIsError] = useState(false);
 
-    // Corrigido: Defina a cor verde primária para reutilização
-    const IFECO_GREEN = '#4CAF50';
+    // Função assíncrona que lida com a autenticação
+    const handleLogin = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setMessage('');
+        setIsError(false);
 
-    const handleLogin = () => {
         if (!email || !password) {
-            setMessage('Por favor, preencha todos os campos');
+            setMessage('E-mail e senha são obrigatórios.');
             setIsError(true);
             return;
         }
 
-        console.log('Tentativa de login com:', { email, password });
-        setMessage('Login realizado com sucesso!');
-        setIsError(false);
-        setTimeout(() => setMessage(''), 3000);
+        try {
+            // Chamada à API de Login
+            const response = await axios.post('http://localhost:3000/api/login', {
+                email: email,
+                senha: password
+            });
+
+            // Assumindo que a API retorna: { success: true, token, user: { id, email, nome } }
+            if (response.data.success && response.data.token && response.data.user) {
+                const { token, user } = response.data;
+
+                // 3. Salvar Token e Nome no armazenamento local
+                localStorage.setItem('userToken', token);
+                localStorage.setItem('userName', user.nome);
+
+                setMessage('Login realizado com sucesso! Redirecionando...');
+
+                // 4. CHAMA O CALLBACK: Notifica o AuthFlowManager para mudar para a tela 'dashboard'
+                onLoginSuccess(token, user);
+
+            } else {
+                setMessage(response.data.message || 'Credenciais inválidas.');
+                setIsError(true);
+            }
+
+        } catch (error: any) {
+            console.error("Erro na API de Login:", error);
+
+            // Tratamento de erro 401 (Não Autorizado) e 500 (Servidor)
+            if (error.response && error.response.status === 401) {
+                setMessage('Credenciais inválidas. Verifique e-mail e senha.');
+            } else {
+                setMessage('Falha na comunicação com o servidor. Tente novamente.');
+            }
+            setIsError(true);
+        }
     };
 
     const handleKeyPress = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter') {
-            handleLogin();
+            handleLogin(e as unknown as React.FormEvent);
         }
     };
 
@@ -41,10 +86,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSwitchToRegister }) => {
         alert('Redirecionando para recuperação de senha...');
     };
 
-    // FUNÇÃO MODIFICADA: Agora chama a prop onSwitchToRegister
     const handleCreateAccount = () => {
         console.log('Navegando para tela de registro');
-        onSwitchToRegister(); // <-- CHAMA O REGISTRATIONSREEN
+        onSwitchToRegister();
     };
 
     return (
@@ -130,119 +174,121 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSwitchToRegister }) => {
                         </div>
                     )}
 
-                    {/* Campos de Input */}
-                    <div style={{ marginBottom: '24px' }}>
-                        <input
-                            type="email"
-                            placeholder="E-mail"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            onKeyPress={handleKeyPress}
-                            style={{
-                                width: '100%',
-                                padding: '14px 16px',
-                                borderRadius: '8px',
-                                border: '1px solid #ddd',
-                                fontSize: '15px',
-                                marginBottom: '16px',
-                                boxSizing: 'border-box',
-                                outline: 'none',
-                                transition: 'all 0.3s',
-                                backgroundColor: '#ffffff',
-                                color: '#000000'
-                            }}
-                            onFocus={(e) => {
-                                e.target.style.borderColor = IFECO_GREEN;
-                                e.target.style.boxShadow = '0 0 0 3px rgba(76, 175, 80, 0.1)';
-                            }}
-                            onBlur={(e) => {
-                                e.target.style.borderColor = '#ddd';
-                                e.target.style.boxShadow = 'none';
-                            }}
-                        />
+                    {/* Formulário (usando form tag para submit no enter) */}
+                    <form onSubmit={handleLogin}>
+                        <div style={{ marginBottom: '24px' }}>
+                            <input
+                                type="email"
+                                placeholder="E-mail"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                onKeyPress={handleKeyPress}
+                                style={{
+                                    width: '100%',
+                                    padding: '14px 16px',
+                                    borderRadius: '8px',
+                                    border: '1px solid #ddd',
+                                    fontSize: '15px',
+                                    marginBottom: '16px',
+                                    boxSizing: 'border-box',
+                                    outline: 'none',
+                                    transition: 'all 0.3s',
+                                    backgroundColor: '#ffffff',
+                                    color: '#000000'
+                                }}
+                                onFocus={(e) => {
+                                    e.target.style.borderColor = IFECO_GREEN;
+                                    e.target.style.boxShadow = '0 0 0 3px rgba(76, 175, 80, 0.1)';
+                                }}
+                                onBlur={(e) => {
+                                    e.target.style.borderColor = '#ddd';
+                                    e.target.style.boxShadow = 'none';
+                                }}
+                            />
 
-                        <input
-                            type="password"
-                            placeholder="Senha"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            onKeyPress={handleKeyPress}
-                            style={{
-                                width: '100%',
-                                padding: '14px 16px',
-                                borderRadius: '8px',
-                                border: '1px solid #ddd',
-                                fontSize: '15px',
-                                boxSizing: 'border-box',
-                                outline: 'none',
-                                transition: 'all 0.3s',
-                                backgroundColor: '#ffffff',
-                                color: '#000000'
-                            }}
-                            onFocus={(e) => {
-                                e.target.style.borderColor = IFECO_GREEN;
-                                e.target.style.boxShadow = '0 0 0 3px rgba(76, 175, 80, 0.1)';
-                            }}
-                            onBlur={(e) => {
-                                e.target.style.borderColor = '#ddd';
-                                e.target.style.boxShadow = 'none';
-                            }}
-                        />
-                    </div>
+                            <input
+                                type="password"
+                                placeholder="Senha"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                onKeyPress={handleKeyPress}
+                                style={{
+                                    width: '100%',
+                                    padding: '14px 16px',
+                                    borderRadius: '8px',
+                                    border: '1px solid #ddd',
+                                    fontSize: '15px',
+                                    boxSizing: 'border-box',
+                                    outline: 'none',
+                                    transition: 'all 0.3s',
+                                    backgroundColor: '#ffffff',
+                                    color: '#000000'
+                                }}
+                                onFocus={(e) => {
+                                    e.target.style.borderColor = IFECO_GREEN;
+                                    e.target.style.boxShadow = '0 0 0 3px rgba(76, 175, 80, 0.1)';
+                                }}
+                                onBlur={(e) => {
+                                    e.target.style.borderColor = '#ddd';
+                                    e.target.style.boxShadow = 'none';
+                                }}
+                            />
+                        </div>
 
-                    {/* Link de Recuperação */}
-                    <div style={{ textAlign: 'right', marginBottom: '24px' }}>
+                        {/* Link de Recuperação */}
+                        <div style={{ textAlign: 'right', marginBottom: '24px' }}>
+                            <button
+                                onClick={handleForgotPassword}
+                                type="button"
+                                style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    color: IFECO_GREEN,
+                                    fontSize: '14px',
+                                    fontWeight: '500',
+                                    cursor: 'pointer',
+                                    padding: 0
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.textDecoration = 'underline'}
+                                onMouseLeave={(e) => e.currentTarget.style.textDecoration = 'none'}
+                            >
+                                Esqueceu sua Senha?
+                            </button>
+                        </div>
+
+                        {/* Botão de Login (type="submit" para funcionar com form) */}
                         <button
-                            onClick={handleForgotPassword}
+                            type="submit"
                             style={{
-                                background: 'none',
+                                width: '100%',
+                                padding: '16px',
+                                borderRadius: '8px',
                                 border: 'none',
-                                color: IFECO_GREEN,
-                                fontSize: '14px',
-                                fontWeight: '500',
+                                background: 'linear-gradient(135deg, #4CAF50 0%, #66BB6A 100%)',
+                                color: 'white',
+                                fontSize: '16px',
+                                fontWeight: 'bold',
                                 cursor: 'pointer',
-                                padding: 0
+                                transition: 'all 0.3s',
+                                boxShadow: '0 4px 12px rgba(76, 175, 80, 0.3)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '8px'
                             }}
-                            onMouseEnter={(e) => e.currentTarget.style.textDecoration = 'underline'}
-                            onMouseLeave={(e) => e.currentTarget.style.textDecoration = 'none'}
+                            onMouseEnter={(e) => {
+                                e.currentTarget.style.transform = 'translateY(-2px)';
+                                e.currentTarget.style.boxShadow = '0 6px 20px rgba(76, 175, 80, 0.4)';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.transform = 'translateY(0)';
+                                e.currentTarget.style.boxShadow = '0 4px 12px rgba(76, 175, 80, 0.3)';
+                            }}
                         >
-                            Esqueceu sua Senha?
+                            <LogIn style={{ width: '20px', height: '20px' }} />
+                            Entrar
                         </button>
-                    </div>
-
-                    {/* Botão de Login */}
-                    <button
-                        onClick={handleLogin}
-                        style={{
-                            width: '100%',
-                            padding: '16px',
-                            borderRadius: '8px',
-                            border: 'none',
-                            background: 'linear-gradient(135deg, #4CAF50 0%, #66BB6A 100%)',
-                            color: 'white',
-                            fontSize: '16px',
-                            fontWeight: 'bold',
-                            cursor: 'pointer',
-                            transition: 'all 0.3s',
-                            boxShadow: '0 4px 12px rgba(76, 175, 80, 0.3)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '8px'
-                        }}
-                        onMouseEnter={(e) => {
-                            e.currentTarget.style.transform = 'translateY(-2px)';
-                            e.currentTarget.style.boxShadow = '0 6px 20px rgba(76, 175, 80, 0.4)';
-                        }}
-                        onMouseLeave={(e) => {
-                            e.currentTarget.style.transform = 'translateY(0)';
-                            e.currentTarget.style.boxShadow = '0 4px 12px rgba(76, 175, 80, 0.3)';
-                        }}
-                    >
-                        {/* Ícone adicionado para seguir o estilo profissional sugerido anteriormente */}
-                        <LogIn style={{ width: '20px', height: '20px' }} />
-                        Entrar
-                    </button>
+                    </form>
 
                     {/* Link de Registro */}
                     <div style={{
@@ -253,7 +299,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSwitchToRegister }) => {
                     }}>
                         Não possui conta?{' '}
                         <button
-                            onClick={handleCreateAccount} // <-- CHAMA O CALLBACK!
+                            onClick={handleCreateAccount}
+                            type="button"
                             style={{
                                 background: 'none',
                                 border: 'none',

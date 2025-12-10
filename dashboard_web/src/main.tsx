@@ -1,20 +1,50 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
 
-// Importa as duas telas
+// Importa as telas
+import DashboardScreen from './pages/DashboardScreen.tsx'; // Importado o Dashboard
 import LoginScreen from './pages/LoginScreen.tsx';
 import RegistrationScreen from './pages/RegistrationScreen.tsx';
 
-// Componente Wrapper para gerenciar a visualização
+// Componente Wrapper para gerenciar a visualização e autenticação
 const AuthFlowManager: React.FC = () => {
-  // Estado que define a tela atual: 'login' ou 'register'
-  const [view, setView] = useState<'login' | 'register'>('login');
+  // Estado para 'login', 'register' ou 'dashboard'
+  const [view, setView] = useState<'login' | 'register' | 'dashboard'>('login');
+  const [userName, setUserName] = useState(''); // Estado para o nome do usuário
+
+  // 1. Efeito para checar se o usuário já está logado ao carregar
+  useEffect(() => {
+    const token = localStorage.getItem('userToken');
+    const name = localStorage.getItem('userName');
+
+    if (token && name) {
+      setUserName(name);
+      setView('dashboard');
+    }
+  }, []);
+
+  // Funções de Callback
+
+  const handleLoginSuccess = (token: string, user: { nome: string }) => {
+    setUserName(user.nome);
+    setView('dashboard');
+  };
+
+  const handleLogout = () => {
+    // Limpa o armazenamento local
+    localStorage.removeItem('userToken');
+    localStorage.removeItem('userName');
+    setUserName('');
+    // Retorna para a tela de login
+    setView('login');
+  };
 
   const renderScreen = () => {
-    if (view === 'login') {
-      return <LoginScreen
-        onSwitchToRegister={() => setView('register')}
+    if (view === 'dashboard') {
+      return <DashboardScreen
+        onLogout={handleLogout}
+        userName={userName} // Passa o nome para o Header
       />;
     }
 
@@ -24,8 +54,14 @@ const AuthFlowManager: React.FC = () => {
       />;
     }
 
-    // Futuro: Adicionar lógica para a tela do Dashboard (App.tsx) após login bem-sucedido
-    return <div>Tela de Carregamento...</div>;
+    if (view === 'login') {
+      return <LoginScreen
+        onSwitchToRegister={() => setView('register')}
+        onLoginSuccess={handleLoginSuccess} // Passa o novo callback
+      />;
+    }
+
+    return <div>Carregando...</div>;
   };
 
   return (

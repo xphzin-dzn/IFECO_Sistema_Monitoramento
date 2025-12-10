@@ -1,18 +1,18 @@
 const express = require('express');
 const mysql = require('mysql2');
 const cors = require('cors');
-// const bodyParser = require('body-parser'); // <-- REMOVIDO!
+// const bodyParser = require('body-parser'); // Removido
 require('dotenv').config();
 
-// IMPORTAR O CONTROLLER DE USUÁRIO
+// IMPORTAR O CONTROLLER DE USUÁRIO (necessário para a rota de login e registro)
 const userController = require('./src/controllers/userController');
 
 const app = express();
 const PORT = 3000;
 
-// Middleware CORRIGIDO
+// Middleware
 app.use(cors());
-// 1. UTILIZANDO APENAS O EXPRESS.JSON() para ler o corpo da requisição
+// 1. Utilizando apenas o express.json() para ler o corpo da requisição
 app.use(express.json({ limit: '50mb' }));
 
 // Configuração básica (sem o banco de dados inicialmente para garantir a conexão)
@@ -67,8 +67,7 @@ const initDB = () => {
 };
 
 const createTables = () => {
-    // CORREÇÃO DE SINTAXE MANTIDA: Sem quebras de linha e indentação inicial
-    // Tabela 1: TB_USUARIOS
+    // Tabela 1: TB_USUARIOS (sintaxe corrigida)
     const tbUsuarios = `CREATE TABLE IF NOT EXISTS TB_USUARIOS (
 id INT AUTO_INCREMENT PRIMARY KEY,
 nome VARCHAR(100) NOT NULL,
@@ -77,7 +76,7 @@ senha_hash VARCHAR(255) NOT NULL,
 data_cadastro DATETIME DEFAULT CURRENT_TIMESTAMP
 )`;
 
-    // Tabela 2: TB_SESSOES
+    // Tabela 2: TB_SESSOES (sintaxe corrigida)
     const tbSessoes = `CREATE TABLE IF NOT EXISTS TB_SESSOES (
 id INT AUTO_INCREMENT PRIMARY KEY,
 usuario_id INT NOT NULL,
@@ -88,7 +87,7 @@ data_fim DATETIME,
 FOREIGN KEY (usuario_id) REFERENCES TB_USUARIOS(id)
 )`;
 
-    // Tabela 3: TB_LEITURAS
+    // Tabela 3: TB_LEITURAS (sintaxe corrigida)
     const tbLeituras = `CREATE TABLE IF NOT EXISTS TB_LEITURAS (
 id BIGINT AUTO_INCREMENT PRIMARY KEY,
 sessao_id INT NOT NULL,
@@ -104,7 +103,7 @@ FOREIGN KEY (sessao_id) REFERENCES TB_SESSOES(id) ON DELETE CASCADE
     pool.query(tbUsuarios, (err) => {
         if (err) console.error("Erro TB_USUARIOS:", err);
         else {
-            // Corrigido: Uso de um hash bcrypt válido para o usuário demo
+            // Uso de um hash bcrypt válido para o usuário demo
             const demoHash = '$2a$10$w3U6hLpL8K2p9j9Yy7jG.u/d5qG7Fp1Z0Y/lG8M1c0pE0c7c3c5xU'; // Senha simulada 'admin123'
             pool.query(`INSERT IGNORE INTO TB_USUARIOS (id, nome, email, senha_hash) VALUES (1, 'Admin', 'admin@ifeco.com', '${demoHash}')`);
 
@@ -126,7 +125,10 @@ initDB();
 
 // --- ROTAS ---
 
-// ROTA DE REGISTRO
+// 2. INJEÇÃO DA ROTA DE LOGIN (CRÍTICO PARA O ERRO 404)
+app.post('/api/login', userController.login);
+
+// ROTA DE REGISTRO (Já estava aqui, mas garantida)
 app.post('/api/register', userController.register);
 
 app.post('/api/save-session', async (req, res) => {
