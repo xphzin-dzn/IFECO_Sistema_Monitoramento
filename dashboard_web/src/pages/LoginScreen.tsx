@@ -1,10 +1,21 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
+// Necessário para o ícone de Login no botão (assumindo que você usa Lucide)
+import { LogIn } from 'lucide-react';
 
-const LoginScreen = () => {
+// Adicione a interface das Props
+interface LoginScreenProps {
+    onSwitchToRegister: () => void; // A função que muda o estado de visualização no main.tsx
+}
+
+// Altere a assinatura do componente para aceitar as props
+const LoginScreen: React.FC<LoginScreenProps> = ({ onSwitchToRegister }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [message, setMessage] = useState('');
     const [isError, setIsError] = useState(false);
+
+    // Corrigido: Defina a cor verde primária para reutilização
+    const IFECO_GREEN = '#4CAF50';
 
     const handleLogin = () => {
         if (!email || !password) {
@@ -30,20 +41,25 @@ const LoginScreen = () => {
         alert('Redirecionando para recuperação de senha...');
     };
 
+    // FUNÇÃO MODIFICADA: Agora chama a prop onSwitchToRegister
     const handleCreateAccount = () => {
         console.log('Navegando para tela de registro');
-        alert('Redirecionando para criar conta...');
+        onSwitchToRegister(); // <-- CHAMA O REGISTRATIONSREEN
     };
 
     return (
         <div style={{
-            minHeight: '100vh',
-            width: '100%',
+            height: '100vh',
+            width: '100vw',
             background: 'linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            padding: '40px 20px'
+            padding: '40px 20px',
+            overflow: 'hidden',
+            position: 'fixed',
+            top: 0,
+            left: 0
         }}>
             <div style={{
                 backgroundColor: 'white',
@@ -57,7 +73,7 @@ const LoginScreen = () => {
                 {/* Barra Lateral Verde */}
                 <div style={{
                     width: '8px',
-                    background: '#4CAF50',
+                    background: IFECO_GREEN,
                     flexShrink: 0
                 }}></div>
 
@@ -71,7 +87,7 @@ const LoginScreen = () => {
                         <h1 style={{
                             fontSize: '42px',
                             fontWeight: 'bold',
-                            color: '#4CAF50',
+                            color: IFECO_GREEN,
                             margin: 0,
                             letterSpacing: '1px'
                         }}>
@@ -131,10 +147,12 @@ const LoginScreen = () => {
                                 marginBottom: '16px',
                                 boxSizing: 'border-box',
                                 outline: 'none',
-                                transition: 'all 0.3s'
+                                transition: 'all 0.3s',
+                                backgroundColor: '#ffffff',
+                                color: '#000000'
                             }}
                             onFocus={(e) => {
-                                e.target.style.borderColor = '#4CAF50';
+                                e.target.style.borderColor = IFECO_GREEN;
                                 e.target.style.boxShadow = '0 0 0 3px rgba(76, 175, 80, 0.1)';
                             }}
                             onBlur={(e) => {
@@ -157,10 +175,12 @@ const LoginScreen = () => {
                                 fontSize: '15px',
                                 boxSizing: 'border-box',
                                 outline: 'none',
-                                transition: 'all 0.3s'
+                                transition: 'all 0.3s',
+                                backgroundColor: '#ffffff',
+                                color: '#000000'
                             }}
                             onFocus={(e) => {
-                                e.target.style.borderColor = '#4CAF50';
+                                e.target.style.borderColor = IFECO_GREEN;
                                 e.target.style.boxShadow = '0 0 0 3px rgba(76, 175, 80, 0.1)';
                             }}
                             onBlur={(e) => {
@@ -177,7 +197,7 @@ const LoginScreen = () => {
                             style={{
                                 background: 'none',
                                 border: 'none',
-                                color: '#4CAF50',
+                                color: IFECO_GREEN,
                                 fontSize: '14px',
                                 fontWeight: '500',
                                 cursor: 'pointer',
@@ -204,7 +224,11 @@ const LoginScreen = () => {
                             fontWeight: 'bold',
                             cursor: 'pointer',
                             transition: 'all 0.3s',
-                            boxShadow: '0 4px 12px rgba(76, 175, 80, 0.3)'
+                            boxShadow: '0 4px 12px rgba(76, 175, 80, 0.3)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '8px'
                         }}
                         onMouseEnter={(e) => {
                             e.currentTarget.style.transform = 'translateY(-2px)';
@@ -215,6 +239,8 @@ const LoginScreen = () => {
                             e.currentTarget.style.boxShadow = '0 4px 12px rgba(76, 175, 80, 0.3)';
                         }}
                     >
+                        {/* Ícone adicionado para seguir o estilo profissional sugerido anteriormente */}
+                        <LogIn style={{ width: '20px', height: '20px' }} />
                         Entrar
                     </button>
 
@@ -227,11 +253,11 @@ const LoginScreen = () => {
                     }}>
                         Não possui conta?{' '}
                         <button
-                            onClick={handleCreateAccount}
+                            onClick={handleCreateAccount} // <-- CHAMA O CALLBACK!
                             style={{
                                 background: 'none',
                                 border: 'none',
-                                color: '#4CAF50',
+                                color: IFECO_GREEN,
                                 fontWeight: '600',
                                 cursor: 'pointer',
                                 padding: 0
