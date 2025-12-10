@@ -30,7 +30,7 @@ import {
 // Assumindo que você tem um hook useWebBle (se não, adapte-o)
 import useWebBle from '../hooks/useWebBle';
 
-// --- TIPOS E CONSTANTES (Replicados do App.tsx original) ---
+// --- TIPOS E CONSTANTES ---
 
 const TARGET_DEVICE_NAME = 'IFECO_TELEMETRIA';
 
@@ -68,17 +68,17 @@ interface ChartSectionProps {
     children: React.ReactNode;
 }
 
-// Props do Dashboard: Recebe a função de logout do componente pai (AuthFlowManager)
 interface DashboardScreenProps {
     onLogout: () => void;
     userName: string; // Nome do usuário logado
 }
 
 
-// --- COMPONENTES AUXILIARES (Para manter a organização) ---
+// --- COMPONENTES AUXILIARES (Com CSS LIMPO em Tailwind) ---
 
 const MetricCard: React.FC<MetricCardProps> = ({ icon: Icon, label, value, unit, color }) => (
     <div className="bg-white p-4 rounded-lg border shadow-sm flex flex-col items-center justify-center">
+        {/* Usando interpolação para cores dinâmicas do Tailwind */}
         <Icon className={`w-6 h-6 text-${color}-500 mb-2`} />
         <h4 className="font-medium text-sm text-gray-600">{label}</h4>
         <div className="text-3xl font-bold text-gray-800 mt-1">{value}</div>
@@ -103,10 +103,8 @@ const ChartSection: React.FC<ChartSectionProps> = ({ title, icon: Icon, children
 
 // --- COMPONENTE PRINCIPAL: DASHBOARD SCREEN ---
 const DashboardScreen: React.FC<DashboardScreenProps> = ({ onLogout, userName }) => {
-    // Integração do Hook BLE (assumindo que o useWebBle está no lugar certo)
+    // Integração do Hook BLE 
     const { dadosVeiculo, status: bleStatus, conectarDispositivo, desconectarDispositivo } = useWebBle();
-
-    // ... (MANTIDO O MESMO CÓDIGO DE LÓGICA DO DASHBOARD/APP.TSX) ...
 
     const [viewMode, setViewMode] = useState<ViewMode>('DISCONNECTED');
     const sessionDataRef = useRef<CombinedSensorData[]>([]);
@@ -206,6 +204,9 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ onLogout, userName })
 
         const endTime = Date.now();
 
+        // Obter o token para autenticar a chamada de API
+        const token = localStorage.getItem('userToken');
+
         try {
             const sessionData: SessionData = {
                 sessionId: `session_${startTimeRef.current}`,
@@ -215,13 +216,16 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ onLogout, userName })
                 data: sessionDataRef.current
             };
 
-            // Simulação do envio para o backend (AJUSTE AQUI para enviar dados reais)
+            // Chamada à API para salvar a sessão
             await axios.post('http://localhost:3000/api/save-session', {
-                // Aqui você precisaria enviar o usuario_id real do usuário logado
-                usuario_id: 1,
+                usuario_id: 1, // **AQUI DEVE SER O ID REAL DO USUÁRIO LOGADO!**
                 data_inicio: startTimeRef.current,
                 data_fim: endTime,
                 leituras: sessionDataRef.current
+            }, {
+                headers: {
+                    'Authorization': `Bearer ${token}` // Incluir o token JWT
+                }
             });
 
             // Simulação da busca de dados (usando os dados locais)
@@ -231,7 +235,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ onLogout, userName })
 
         } catch (error) {
             console.error('Erro ao enviar dados para o servidor:', error);
-            alert('Erro ao enviar dados. Exibindo dados coletados localmente.');
+            alert('Erro ao enviar dados. Verifique o servidor Node.js ou o Token JWT.');
 
             // Se falhar, exibe os dados coletados localmente
             setSessionHistory({
@@ -269,7 +273,6 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ onLogout, userName })
 
     // Renderizar baseado no estado atual
     const renderView = () => {
-        // ... (o código renderView é mantido conforme a lógica do App.tsx) ...
         switch (viewMode) {
             case 'ERRO_BLE':
                 return (
