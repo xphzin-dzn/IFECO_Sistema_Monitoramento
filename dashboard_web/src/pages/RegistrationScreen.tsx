@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { UserPlus } from 'lucide-react'; // Ícone para o botão
+import { UserPlus } from 'lucide-react';
 import React, { useState } from 'react';
 
 // Adicionado: Interface para as propriedades (props) de navegação
@@ -10,38 +10,35 @@ interface RegistrationScreenProps {
 // Corrigido: Definição da cor primária
 const IFECO_GREEN = '#4CAF50';
 
-// Adicionado: Interface para o estado do formulário para tipagem correta
+// Adicionado: Interface para o estado do formulário apenas com campos essenciais
 interface FormData {
     nomeCompleto: string;
     email: string;
-    dataNascimento: string;
-    telefone: string;
     senha: string;
-    confirmarSenha: string;
+    confirmarSenha: string; // Mantido para validação
 }
 
 // Alterada a assinatura do componente para aceitar as props
 const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onSwitchToLogin }) => {
+    // 1. Campos desnecessários removidos do estado
     const [formData, setFormData] = useState<FormData>({
         nomeCompleto: '',
         email: '',
-        dataNascimento: '',
-        telefone: '',
         senha: '',
         confirmarSenha: ''
     });
     const [message, setMessage] = useState('');
     const [isError, setIsError] = useState(false);
 
+    // Corrigido o tipo da chave
     const handleInputChange = (field: keyof FormData, value: string) => {
         setFormData(prev => ({ ...prev, [field]: value }));
     };
 
-    // Função de Registro AGORA É ASSÍNCRONA e lida com a API
     const handleRegistration = async (e: React.FormEvent) => {
-        e.preventDefault(); // Impede o recarregamento da página
+        e.preventDefault();
 
-        // --- VALIDAÇÕES DE FRONTEND ---
+        // --- VALIDAÇÕES DE FRONTEND (mantendo todos os campos visíveis) ---
         if (!formData.nomeCompleto || !formData.email || !formData.senha || !formData.confirmarSenha) {
             setMessage('Por favor, preencha todos os campos obrigatórios (*)');
             setIsError(true);
@@ -68,48 +65,39 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onSwitchToLogin
         }
         // --- FIM DAS VALIDAÇÕES ---
 
-        // Simulação de chamada à API
         try {
-            // A rota de registro no seu backend Node.js deve ser /api/register
+            // Chamada à API: Envia apenas os dados necessários para a TB_USUARIOS (nome, email, senha)
             const response = await axios.post('http://localhost:3000/api/register', {
-                // Enviamos apenas os dados que a TB_USUARIOS precisa (nome, email, senha)
                 nome: formData.nomeCompleto,
                 email: formData.email,
-                senha: formData.senha
+                senha: formData.senha // Será hasheada pelo backend
             });
 
-            // Sucesso na inserção do banco
             if (response.status === 201 || response.data.success) {
                 setMessage('Conta criada com sucesso! Redirecionando para login...');
                 setIsError(false);
 
-                // Redirecionamento após 1.5 segundos
                 setTimeout(() => {
                     onSwitchToLogin();
                 }, 1500);
             } else {
-                // Lidar com erros de negócio do backend (ex: email já em uso)
                 setMessage(response.data.message || 'Erro ao registrar. O e-mail pode já estar em uso.');
                 setIsError(true);
             }
 
         } catch (error) {
             console.error("Erro na API de Registro:", error);
-            // Mensagem genérica de falha na rede ou servidor indisponível
-            setMessage('Falha na comunicação com o servidor. Verifique o backend.');
+            setMessage('Falha na comunicação com o servidor.');
             setIsError(true);
         }
     };
 
-    // Remoção do onKeyPress dos inputs para simplificar (o botão é suficiente)
     const handleKeyPress = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter') {
-            // Força o envio do formulário
             handleRegistration(e as unknown as React.FormEvent);
         }
     };
 
-    // Função de Navegação de volta (Executa a prop)
     const handleBackToLogin = () => {
         onSwitchToLogin();
     };
@@ -197,8 +185,9 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onSwitchToLogin
                         </div>
                     )}
 
-                    {/* Formulário (utilizando form tag para melhor acessibilidade) */}
+                    {/* Formulário (usando form tag para submit no enter) */}
                     <form onSubmit={handleRegistration} style={{ marginBottom: '24px' }}>
+
                         {/* Nome Completo */}
                         <input
                             type="text"
@@ -259,67 +248,7 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onSwitchToLogin
                             }}
                         />
 
-                        {/* Data de Nascimento */}
-                        <input
-                            type="text"
-                            placeholder="Data de Nascimento (DD/MM/AAAA)"
-                            value={formData.dataNascimento}
-                            onChange={(e) => handleInputChange('dataNascimento', e.target.value)}
-                            onKeyPress={handleKeyPress}
-                            style={{
-                                width: '100%',
-                                padding: '14px 16px',
-                                borderRadius: '8px',
-                                border: '1px solid #ddd',
-                                fontSize: '15px',
-                                marginBottom: '14px',
-                                boxSizing: 'border-box',
-                                outline: 'none',
-                                transition: 'all 0.3s',
-                                backgroundColor: '#ffffff',
-                                color: '#000000'
-                            }}
-                            onFocus={(e) => {
-                                e.target.style.borderColor = IFECO_GREEN;
-                                e.target.style.boxShadow = '0 0 0 3px rgba(76, 175, 80, 0.1)';
-                            }}
-                            onBlur={(e) => {
-                                e.target.style.borderColor = '#ddd';
-                                e.target.style.boxShadow = 'none';
-                            }}
-                        />
-
-                        {/* Telefone */}
-                        <input
-                            type="text"
-                            placeholder="Número de Telefone"
-                            value={formData.telefone}
-                            onChange={(e) => handleInputChange('telefone', e.target.value)}
-                            onKeyPress={handleKeyPress}
-                            style={{
-                                width: '100%',
-                                padding: '14px 16px',
-                                borderRadius: '8px',
-                                border: '1px solid #ddd',
-                                fontSize: '15px',
-                                marginBottom: '14px',
-                                boxSizing: 'border-box',
-                                outline: 'none',
-                                transition: 'all 0.3s',
-                                backgroundColor: '#ffffff',
-                                color: '#000000'
-                            }}
-                            onFocus={(e) => {
-                                e.target.style.borderColor = IFECO_GREEN;
-                                e.target.style.boxShadow = '0 0 0 3px rgba(76, 175, 80, 0.1)';
-                            }}
-                            onBlur={(e) => {
-                                e.target.style.borderColor = '#ddd';
-                                e.target.style.boxShadow = 'none';
-                            }}
-                        />
-
-                        {/* Senha */}
+                        {/* SENHA */}
                         <input
                             type="password"
                             placeholder="Senha *"
@@ -349,7 +278,7 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onSwitchToLogin
                             }}
                         />
 
-                        {/* Confirmar Senha */}
+                        {/* CONFIRMAR SENHA (MANTIDO PARA VALIDAÇÃO) */}
                         <input
                             type="password"
                             placeholder="Confirmar Senha *"
@@ -422,7 +351,7 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onSwitchToLogin
                     }}>
                         Já possui conta?{' '}
                         <button
-                            onClick={handleBackToLogin} // <-- EXECUTA A NAVEGAÇÃO
+                            onClick={handleBackToLogin}
                             style={{
                                 background: 'none',
                                 border: 'none',

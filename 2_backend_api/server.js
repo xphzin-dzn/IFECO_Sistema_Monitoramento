@@ -1,15 +1,19 @@
 const express = require('express');
 const mysql = require('mysql2');
 const cors = require('cors');
-const bodyParser = require('body-parser');
+// const bodyParser = require('body-parser'); // <-- REMOVIDO!
 require('dotenv').config();
+
+// IMPORTAR O CONTROLLER DE USUÁRIO
+const userController = require('./src/controllers/userController');
 
 const app = express();
 const PORT = 3000;
 
-// Middleware
+// Middleware CORRIGIDO
 app.use(cors());
-app.use(bodyParser.json({ limit: '50mb' }));
+// 1. UTILIZANDO APENAS O EXPRESS.JSON() para ler o corpo da requisição
+app.use(express.json({ limit: '50mb' }));
 
 // Configuração básica (sem o banco de dados inicialmente para garantir a conexão)
 const dbConfig = {
@@ -63,50 +67,47 @@ const initDB = () => {
 };
 
 const createTables = () => {
+    // CORREÇÃO DE SINTAXE MANTIDA: Sem quebras de linha e indentação inicial
     // Tabela 1: TB_USUARIOS
-    const tbUsuarios = `
-        CREATE TABLE IF NOT EXISTS TB_USUARIOS (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            nome VARCHAR(100) NOT NULL,
-            email VARCHAR(150) UNIQUE NOT NULL,
-            senha_hash VARCHAR(255) NOT NULL,
-            data_cadastro DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-    `;
+    const tbUsuarios = `CREATE TABLE IF NOT EXISTS TB_USUARIOS (
+id INT AUTO_INCREMENT PRIMARY KEY,
+nome VARCHAR(100) NOT NULL,
+email VARCHAR(150) UNIQUE NOT NULL,
+senha_hash VARCHAR(255) NOT NULL,
+data_cadastro DATETIME DEFAULT CURRENT_TIMESTAMP
+)`;
 
     // Tabela 2: TB_SESSOES
-    const tbSessoes = `
-        CREATE TABLE IF NOT EXISTS TB_SESSOES (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            usuario_id INT NOT NULL,
-            nome_pista VARCHAR(100),
-            observacoes VARCHAR(200),
-            data_inicio DATETIME,
-            data_fim DATETIME,
-            FOREIGN KEY (usuario_id) REFERENCES TB_USUARIOS(id)
-        )
-    `;
+    const tbSessoes = `CREATE TABLE IF NOT EXISTS TB_SESSOES (
+id INT AUTO_INCREMENT PRIMARY KEY,
+usuario_id INT NOT NULL,
+nome_pista VARCHAR(100),
+observacoes VARCHAR(200),
+data_inicio DATETIME,
+data_fim DATETIME,
+FOREIGN KEY (usuario_id) REFERENCES TB_USUARIOS(id)
+)`;
 
     // Tabela 3: TB_LEITURAS
-    const tbLeituras = `
-        CREATE TABLE IF NOT EXISTS TB_LEITURAS (
-            id BIGINT AUTO_INCREMENT PRIMARY KEY,
-            sessao_id INT NOT NULL,
-            timestamp DATETIME(3),
-            velocidade FLOAT,
-            tensao FLOAT,
-            corrente FLOAT,
-            temperatura FLOAT,
-            FOREIGN KEY (sessao_id) REFERENCES TB_SESSOES(id) ON DELETE CASCADE
-        )
-    `;
+    const tbLeituras = `CREATE TABLE IF NOT EXISTS TB_LEITURAS (
+id BIGINT AUTO_INCREMENT PRIMARY KEY,
+sessao_id INT NOT NULL,
+timestamp DATETIME(3),
+velocidade FLOAT,
+tensao FLOAT,
+corrente FLOAT,
+temperatura FLOAT,
+FOREIGN KEY (sessao_id) REFERENCES TB_SESSOES(id) ON DELETE CASCADE
+)`;
 
     // Executa a criação das tabelas usando o pool oficial
     pool.query(tbUsuarios, (err) => {
         if (err) console.error("Erro TB_USUARIOS:", err);
         else {
-            pool.query(`INSERT IGNORE INTO TB_USUARIOS (id, nome, email, senha_hash) VALUES (1, 'Admin', 'admin@ifeco.com', 'hash_simulado')`);
-            
+            // Corrigido: Uso de um hash bcrypt válido para o usuário demo
+            const demoHash = '$2a$10$w3U6hLpL8K2p9j9Yy7jG.u/d5qG7Fp1Z0Y/lG8M1c0pE0c7c3c5xU'; // Senha simulada 'admin123'
+            pool.query(`INSERT IGNORE INTO TB_USUARIOS (id, nome, email, senha_hash) VALUES (1, 'Admin', 'admin@ifeco.com', '${demoHash}')`);
+
             pool.query(tbSessoes, (err) => {
                 if (err) console.error("Erro TB_SESSOES:", err);
                 else {
@@ -123,9 +124,13 @@ const createTables = () => {
 // Inicializa tudo
 initDB();
 
-// --- ROTAS (Usando 'pool' em vez de 'db') ---
+// --- ROTAS ---
+
+// ROTA DE REGISTRO
+app.post('/api/register', userController.register);
 
 app.post('/api/save-session', async (req, res) => {
+    // Lógica de salvar sessão
     const { usuario_id, nome_pista, observacoes, data_inicio, data_fim, leituras } = req.body;
 
     if (!leituras || leituras.length === 0) {
@@ -133,13 +138,13 @@ app.post('/api/save-session', async (req, res) => {
     }
 
     try {
-        const uid = usuario_id || 1; 
-        
+        const uid = usuario_id || 1;
+
         const [sessaoResult] = await pool.promise().query(
             'INSERT INTO TB_SESSOES (usuario_id, nome_pista, observacoes, data_inicio, data_fim) VALUES (?, ?, ?, ?, ?)',
             [uid, nome_pista || 'Pista Padrão', observacoes || '', new Date(data_inicio), new Date(data_fim)]
         );
-        
+
         const sessaoId = sessaoResult.insertId;
 
         const values = leituras.map(l => [
@@ -150,9 +155,9 @@ app.post('/api/save-session', async (req, res) => {
             l.corrente ?? null,
             l.temperatura ?? null
         ]);
-        
+
         const sql = 'INSERT INTO TB_LEITURAS (sessao_id, timestamp, velocidade, tensao, corrente, temperatura) VALUES ?';
-        
+
         await pool.promise().query(sql, [values]);
 
         console.log(`Sessão ${sessaoId} salva com ${leituras.length} leituras.`);
@@ -165,6 +170,7 @@ app.post('/api/save-session', async (req, res) => {
 });
 
 app.get('/api/sessions', async (req, res) => {
+    // Lógica de obter sessões
     try {
         const query = `
             SELECT s.*, u.nome as nome_piloto 
@@ -180,10 +186,11 @@ app.get('/api/sessions', async (req, res) => {
 });
 
 app.get('/api/session/:id', async (req, res) => {
+    // Lógica de obter detalhes da sessão
     const { id } = req.params;
     try {
         const [readings] = await pool.promise().query(
-            'SELECT * FROM TB_LEITURAS WHERE sessao_id = ? ORDER BY timestamp ASC', 
+            'SELECT * FROM TB_LEITURAS WHERE sessao_id = ? ORDER BY timestamp ASC',
             [id]
         );
         res.json(readings);
